@@ -1,0 +1,13 @@
+services:
+  bot:
+    image: ghcr.io/005-bot/tg-bot:latest
+    environment:
+      - REDIS__URL=redis://redis:6379
+      - REDIS__PREFIX=monitor
+      - TELEGRAM__TOKEN=${TELEGRAM__TOKEN}
+    networks:
+      - internal
+   
+networks:
+  internal:
+    external: true

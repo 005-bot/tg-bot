@@ -1,13 +1,12 @@
 version: '3.8'
 
 services:
-  monitor:
+  bot:
     build: .
     environment:
       - REDIS__URL=redis://redis:6379
       - REDIS__PREFIX=records
-      - SCRAPER__URL=http://93.92.65.26/aspx/Gorod.htm
-      - SCRAPER__INTERVAL=5
+      - TELEGRAM__TOKEN=${TELEGRAM__TOKEN}
     depends_on:
       redis:
         condition: service_healthy
