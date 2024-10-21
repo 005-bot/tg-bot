@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  monitor:
+    build: .
+    environment:
+      - REDIS__URL=redis://redis:6379
+      - REDIS__PREFIX=records
+      - SCRAPER__URL=http://93.92.65.26/aspx/Gorod.htm
+      - SCRAPER__INTERVAL=5
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis-data:
