@@ -1,91 +1,90 @@
-# import asyncio
-# import aioredis
-# from aiogram import Bot, Dispatcher, types
-# from aiogram.types import ParseMode
-# from aiogram.utils import executor
+import asyncio
+import logging
+import signal
 
-# from app.config import config
-
-# # Replace with your Telegram bot token and Redis URL
-# TELEGRAM_BOT_TOKEN = config.telegram.token
-# REDIS_URL = config.redis.url
-# REDIS_CHANNEL = config.redis.prefix
-
-# # Initialize the bot and dispatcher
-# bot = Bot(token=TELEGRAM_BOT_TOKEN, parse_mode=ParseMode.HTML)
-# dp = Dispatcher()
-
-# # Store user IDs who subscribed to receive messages
-# subscribed_users = set()
-
-
-# @dp.message_handler(commands=["start"])
-# async def start_handler(message: types.Message):
-#     subscribed_users.add(message.from_user.id)
-#     await message.reply("You have subscribed to updates!")
-
-
-# @dp.message_handler(commands=["stop"])
-# async def stop_handler(message: types.Message):
-#     subscribed_users.discard(message.from_user.id)
-#     await message.reply("You have unsubscribed from updates.")
-
-
-# async def listen_to_redis():
-#     global redis
-#     redis = await aioredis.create_redis(REDIS_URL)
-#     try:
-#         res = await redis.subscribe(REDIS_CHANNEL)
-#         channel = res[0]
-
-#         while await channel.wait_message():
-#             msg = await channel.get(encoding="utf-8")
-#             print(f"Received message from Redis: {msg}")
-#             await broadcast_message(msg)
-#     except Exception as e:
-#         print(f"Error: {e}")
-#     finally:
-#         redis.close()
-#         await redis.wait_closed()
-
-
-# async def broadcast_message(msg):
-#     for user_id in subscribed_users:
-#         try:
-#             await bot.send_message(user_id, msg)
-#         except Exception as e:
-#             print(f"Failed to send message to {user_id}: {e}")
-
-from aiogram import Bot, Dispatcher, html
+from aiogram import Bot, Dispatcher, exceptions, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
-from aiogram.types import Message
+from redis.asyncio import Redis
 
+from app import handlers
 from app.config import config
+from app.services import Listener, Storage
+
+logger = logging.getLogger(__name__)
 
 dp = Dispatcher()
-
-
-@dp.message(CommandStart())
-async def command_start_handler(message: Message) -> None:
-    """
-    This handler receives messages with `/start` command
-    """
-    # Most event objects have aliases for API methods that can be called in events' context
-    # For example if you want to answer to incoming message you can use `message.answer(...)` alias
-    # and the target chat will be passed to :ref:`aiogram.methods.send_message.SendMessage`
-    # method automatically or call API method directly via
-    # Bot instance: `bot.send_message(chat_id=message.chat.id, ...)`
-    await message.answer(f"Hello, {html.bold(message.from_user.full_name)}!")
+dp.include_router(handlers.router)
 
 
 async def run():
+    r = Redis.from_url(url=config.redis.url, decode_responses=True)
+    s = Storage(redis=r, prefix=config.redis.prefix)
+
     # Initialize Bot instance with default bot properties which will be passed to all API calls
     bot = Bot(
         token=config.telegram.token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
 
+    l = Listener(r, config.redis.prefix)
+
+    loop = asyncio.get_event_loop()
+    loop.create_task(listen(bot, l, s))
+
+    register_signal_handlers(loop)
+
     # And the run events dispatching
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot, storage=s, handle_signals=False)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await r.close()
+
+
+async def listen(bot: Bot, listener: Listener, storage: Storage):
+    async for outage in listener.listen():
+        subscribers = await storage.get_subscribed()
+        for user_id in subscribers:
+            logger.info("Sending message to user %d", user_id)
+            try:
+                await bot.send_message(
+                    user_id,
+                    f"""
+{html.bold(html.quote(outage.area))}
+
+{html.quote(outage.address)}
+
+{html.quote(outage.dates)}
+
+{html.quote(outage.organization)}
+                    """,
+                )
+            except exceptions.TelegramForbiddenError:
+                await storage.unsubscribe(user_id)
+                logger.info("User %d unsubscribed from updates", user_id)
+            except Exception as e:
+                logger.error(e)
+
+
+def register_signal_handlers(loop):
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(loop)))
+
+    logger.info("Registered signal handlers for SIGINT and SIGTERM")
+
+
+async def shutdown(loop: "asyncio.AbstractEventLoop"):
+    logger.info("Shutting down Telegram bot gracefully")
+
+    # Cancel any outstanding tasks in the event loop
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    [task.cancel() for task in tasks]
+    await asyncio.gather(*tasks, return_exceptions=True)
+    loop.stop()
+
+    # await dispatcher.storage.close()
+    # await dispatcher.storage.wait_closed()
+
+    logger.info("Telegram bot shutdown complete")

@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "38f8433aa809cd64a281fde5871bb4533bf7bbd2ff4cd8dc4d0ac322096673d5"
+            "sha256": "1a12c16d0a9614703b5f7ddaa338c24661024791c5df101d77b66b35641a8470"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -153,6 +153,10 @@
             ],
             "markers": "python_version >= '3.8'",
             "version": "==0.7.0"
+        },
+        "apis": {
+            "git": "git+https://github.com/005-bot/apis",
+            "ref": "4638a57ace2fbf276b0c0a11e232a92328a333f6"
         },
         "attrs": {
             "hashes": [
