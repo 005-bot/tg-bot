@@ -47,7 +47,7 @@ async def listen(bot: Bot, listener: Listener, storage: Storage):
     async for outage in listener.listen():
         subscribers = await storage.get_subscribed()
         for user_id in subscribers:
-            logger.info("Sending message to user %d", user_id)
+            logger.info("Sending message to user %s", user_id)
             try:
                 await bot.send_message(
                     user_id,
@@ -63,7 +63,7 @@ async def listen(bot: Bot, listener: Listener, storage: Storage):
                 )
             except exceptions.TelegramForbiddenError:
                 await storage.unsubscribe(user_id)
-                logger.info("User %d unsubscribed from updates", user_id)
+                logger.info("User %s unsubscribed from updates", user_id)
             except Exception as e:
                 logger.error(e)
 
