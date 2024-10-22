@@ -5,6 +5,9 @@ import signal
 from aiogram import Bot, Dispatcher, exceptions, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import BotCommand
+from aiogram.fsm.storage.redis import RedisStorage
+from aiogram.fsm.storage.base import DefaultKeyBuilder
 from redis.asyncio import Redis
 
 from app import handlers
@@ -12,9 +15,6 @@ from app.config import config
 from app.services import Listener, Storage
 
 logger = logging.getLogger(__name__)
-
-dp = Dispatcher()
-dp.include_router(handlers.router)
 
 
 async def run():
@@ -24,9 +24,26 @@ async def run():
     await s.migrate()
 
     # Initialize Bot instance with default bot properties which will be passed to all API calls
+    dp = Dispatcher(
+        storage=RedisStorage(
+            r, key_builder=DefaultKeyBuilder(prefix=f"{config.redis.prefix}:fsm")
+        ),
+    )
+    dp.include_router(handlers.router)
     bot = Bot(
         token=config.telegram.token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    await bot.set_my_commands(
+        commands=[
+            BotCommand(command="start", description="Подписаться на уведомления"),
+            BotCommand(command="stop", description="Отписаться от уведомлений"),
+            BotCommand(
+                command="filter",
+                description="Подписаться на уведомления только по определенной улице",
+            ),
+            BotCommand(command="help", description="Показать эту справку"),
+        ]
     )
 
     l = Listener(r, config.redis.prefix)
@@ -48,7 +65,10 @@ async def run():
 async def listen(bot: Bot, listener: Listener, storage: Storage):
     async for outage in listener.listen():
         subscribers = await storage.get_subscribed()
-        for user_id in subscribers:
+        for user_id, f in subscribers.items():
+            if f.street and f.street.lower() not in outage.address.lower():
+                continue
+
             logger.info("Sending message to user %s", user_id)
             try:
                 await bot.send_message(
