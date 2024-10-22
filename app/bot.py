@@ -21,6 +21,8 @@ async def run():
     r = Redis.from_url(url=config.redis.url, decode_responses=True)
     s = Storage(redis=r, prefix=config.redis.prefix)
 
+    await s.migrate()
+
     # Initialize Bot instance with default bot properties which will be passed to all API calls
     bot = Bot(
         token=config.telegram.token,
