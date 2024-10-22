@@ -1,7 +1,7 @@
 from aiogram import Router
 
-from .subscription import router as subscription_router
 from .help import router as help_router
+from .subscription import router as subscription_router
 
 router = Router(name=__name__)
 
