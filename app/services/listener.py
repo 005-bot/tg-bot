@@ -4,7 +4,6 @@ from apis.pubsub_models import Outage
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
-    from aiogram import Bot
 
 
 class Listener:

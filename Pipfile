@@ -10,6 +10,9 @@ apis = {git = "git+https://github.com/005-bot/apis"}
 pydantic = "*"
 
 [dev-packages]
+flake8 = "*"
+black = "*"
+flake8-bugbear = "*"
 
 [requires]
 python_version = "3.11"

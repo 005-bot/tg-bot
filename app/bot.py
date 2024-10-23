@@ -23,7 +23,6 @@ async def run():
 
     await s.migrate()
 
-    # Initialize Bot instance with default bot properties which will be passed to all API calls
     dp = Dispatcher(
         storage=RedisStorage(
             r, key_builder=DefaultKeyBuilder(prefix=f"{config.redis.prefix}:fsm")
@@ -46,10 +45,10 @@ async def run():
         ]
     )
 
-    l = Listener(r, config.redis.prefix)
+    listener = Listener(r, config.redis.prefix)
 
     loop = asyncio.get_event_loop()
-    loop.create_task(listen(bot, l, s))
+    loop.create_task(listen(bot, listener, s))
 
     register_signal_handlers(loop)
 
