@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import signal
+from typing import Optional
 
 from aiogram import Bot, Dispatcher, exceptions, html
 from aiogram.client.default import DefaultBotProperties
@@ -8,6 +9,8 @@ from aiogram.enums import ParseMode
 from aiogram.types import BotCommand
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.fsm.storage.base import DefaultKeyBuilder
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 from redis.asyncio import Redis
 
 from app import handlers
@@ -15,6 +18,18 @@ from app.config import config
 from app.services import Listener, Storage
 
 logger = logging.getLogger(__name__)
+
+
+def create_bot():
+    return Bot(
+        token=config.telegram.token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+
+
+async def set_webhook(url: str):
+    async with create_bot() as bot:
+        await bot.set_webhook(url, allowed_updates=["message"])
 
 
 async def run():
@@ -29,10 +44,8 @@ async def run():
         ),
     )
     dp.include_router(handlers.router)
-    bot = Bot(
-        token=config.telegram.token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
+
+    bot = create_bot()
     await bot.set_my_commands(
         commands=[
             BotCommand(command="start", description="Подписаться на уведомления"),
@@ -54,11 +67,74 @@ async def run():
 
     # And the run events dispatching
     try:
-        await dp.start_polling(bot, storage=s, handle_signals=False)
+        if not config.http.webhook_path:
+            await start_polling(bot, dp, s)
+        else:
+            await start_webhook(
+                bot, dp, s, config.telegram.webhook_url, config.http.webhook_path
+            )
     except asyncio.CancelledError:
         pass
     finally:
         await r.close()
+
+
+async def start_polling(bot: Bot, dp: Dispatcher, storage: Storage):
+    await bot.delete_webhook()
+    await dp.start_polling(bot, storage=storage, handle_signals=False)
+
+
+async def start_webhook(
+    bot: Bot,
+    dp: Dispatcher,
+    storage: Storage,
+    webhook_url: Optional[str],
+    webhook_path: str,
+):
+    async def on_startup(_):
+        logger.info("Starting webhook")
+        if webhook_url:
+            await bot.set_webhook(webhook_url)
+
+    async def on_shutdown(_):
+        logger.info("Shutting down webhook")
+        if webhook_url:
+            await bot.delete_webhook()
+
+    # Create aiohttp.web.Application instance
+    app = web.Application()
+
+    # Register startup and shutdown callbacks
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
+
+    # Create an instance of request handler,
+    # aiogram has few implementations for different cases of usage
+    # In this example we use SimpleRequestHandler which is designed to handle simple cases
+    webhook_requests_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+        storage=storage,
+    )
+    # Register webhook handler on application
+    webhook_requests_handler.register(app, path=webhook_path)
+
+    # Mount dispatcher startup and shutdown hooks to aiohttp application
+    setup_application(app, dp, bot=bot)
+
+    # And finally start webserver
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host=config.http.host, port=config.http.port)
+    await site.start()
+
+    # wait forever
+    try:
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
+        logger.info("Shutting down")
+        await site.stop()
+        await runner.cleanup()
 
 
 async def listen(bot: Bot, listener: Listener, storage: Storage):
