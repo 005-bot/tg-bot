@@ -5,8 +5,31 @@ services:
       - REDIS__URL=redis://redis:6379
       - REDIS__PREFIX=monitor
       - TELEGRAM__TOKEN=${TELEGRAM__TOKEN}
+      - HTTP__WEBHOOK_PATH=${HTTP__WEBHOOK_PATH}
     networks:
       - internal
+      - public
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=public"
+        - "traefik.http.routers.bot-webhook.rule=Host(`xn--90abjv8bl.xn--005-ddd9dya.xn--p1ai`)"
+        - "traefik.http.routers.bot-webhook.entrypoints=https"
+        - "traefik.http.routers.bot-webhook.tls.certresolver=le"
+        - "traefik.http.services.bot-webhook.loadbalancer.server.port=8000"
+      replicas: 1
+      resources:
+        reservations:
+          memory: 64M
+        limits:
+          memory: 256M
+      update_config:
+        order: start-first
+        monitor: 5s
+        failure_action: rollback
+      rollback_config:
+        order: start-first
+        monitor: 5s
    
 networks:
   internal:

@@ -8,6 +8,8 @@ aiogram = "~=3.13"
 redis = "~=5.1"
 apis = {git = "git+https://github.com/005-bot/apis"}
 pydantic = "*"
+aiohttp = "*"
+click = "*"
 
 [dev-packages]
 flake8 = "*"
