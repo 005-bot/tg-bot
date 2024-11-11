@@ -34,3 +34,5 @@ services:
 networks:
   internal:
     external: true
+  public:
+    external: true
