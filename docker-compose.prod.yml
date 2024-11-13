@@ -2,10 +2,11 @@ services:
   bot:
     image: ghcr.io/005-bot/tg-bot:latest
     environment:
-      - REDIS__URL=redis://redis:6379
-      - REDIS__PREFIX=monitor
-      - TELEGRAM__TOKEN=${TELEGRAM__TOKEN}
+      - ADMIN__TELEGRAM_ID=${ADMIN__TELEGRAM_ID}
       - HTTP__WEBHOOK_PATH=${HTTP__WEBHOOK_PATH}
+      - REDIS__PREFIX=monitor
+      - REDIS__URL=redis://redis:6379
+      - TELEGRAM__TOKEN=${TELEGRAM__TOKEN}
     networks:
       - internal
       - public

@@ -14,6 +14,7 @@ from aiohttp import web
 from redis.asyncio import Redis
 
 from app import handlers
+from app.admin import Notificator, Config
 from app.config import config
 from app.services import Listener, Storage
 
@@ -54,9 +55,12 @@ async def run():
                 command="filter",
                 description="Подписаться на уведомления только по определенной улице",
             ),
-            BotCommand(command="help", description="Показать эту справку"),
+            BotCommand(command="feedback", description="Отправить отзыв"),
+            BotCommand(command="help", description="Показать справку"),
         ]
     )
+
+    notificator = Notificator(Config(admin_id=config.admin.telegram_id), bot)
 
     listener = Listener(r, config.redis.prefix)
 
@@ -68,10 +72,15 @@ async def run():
     # And the run events dispatching
     try:
         if not config.http.webhook_path:
-            await start_polling(bot, dp, s)
+            await start_polling(bot, dp, storage=s, notificator=notificator)
         else:
             await start_webhook(
-                bot, dp, s, config.telegram.webhook_url, config.http.webhook_path
+                bot,
+                dp,
+                config.telegram.webhook_url,
+                config.http.webhook_path,
+                storage=s,
+                notificator=notificator,
             )
     except asyncio.CancelledError:
         pass
@@ -79,17 +88,13 @@ async def run():
         await r.close()
 
 
-async def start_polling(bot: Bot, dp: Dispatcher, storage: Storage):
+async def start_polling(bot: Bot, dp: Dispatcher, **kwargs):
     await bot.delete_webhook()
-    await dp.start_polling(bot, storage=storage, handle_signals=False)
+    await dp.start_polling(bot, handle_signals=False, **kwargs)
 
 
 async def start_webhook(
-    bot: Bot,
-    dp: Dispatcher,
-    storage: Storage,
-    webhook_url: Optional[str],
-    webhook_path: str,
+    bot: Bot, dp: Dispatcher, webhook_url: Optional[str], webhook_path: str, **kwargs
 ):
     async def on_startup(_):
         logger.info("Starting webhook")
@@ -111,11 +116,7 @@ async def start_webhook(
     # Create an instance of request handler,
     # aiogram has few implementations for different cases of usage
     # In this example we use SimpleRequestHandler which is designed to handle simple cases
-    webhook_requests_handler = SimpleRequestHandler(
-        dispatcher=dp,
-        bot=bot,
-        storage=storage,
-    )
+    webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot, **kwargs)
     # Register webhook handler on application
     webhook_requests_handler.register(app, path=webhook_path)
 

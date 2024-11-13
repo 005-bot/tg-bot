@@ -3,23 +3,28 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Http:
     host: str
     port: int
     webhook_path: Optional[str]
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Redis:
     url: str
     prefix: str
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Telegram:
     token: str
     webhook_url: Optional[str]
+
+
+@dataclass(frozen=True, slots=True)
+class Admin:
+    telegram_id: Optional[int]
 
 
 @dataclass
@@ -27,6 +32,7 @@ class Config:
     http: Http
     redis: Redis
     telegram: Telegram
+    admin: Admin
 
 
 config = Config(
@@ -42,5 +48,8 @@ config = Config(
     telegram=Telegram(
         token=os.environ.get("TELEGRAM__TOKEN", ""),
         webhook_url=os.environ.get("TELEGRAM__WEBHOOK_URL", None),
+    ),
+    admin=Admin(
+        telegram_id=int(os.environ.get("ADMIN__TELEGRAM_ID", 0)) or None,
     ),
 )

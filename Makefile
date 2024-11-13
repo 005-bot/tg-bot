@@ -40,6 +40,9 @@ format:
 run-local:
 	$(PIPENV) run python -m app
 
+ngrok:
+	ngrok http 8000
+
 # Cleanup
 clean:
 	find . -type f -name '*.pyc' -delete
