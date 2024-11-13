@@ -8,6 +8,7 @@ from aiogram.utils.deep_linking import decode_payload
 
 if TYPE_CHECKING:
     from app.services import Storage
+    from app.admin import Notificator
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,10 @@ class Filter(StatesGroup):
 
 @router.message(filters.CommandStart())
 async def start_handler(
-    message: types.Message, command: filters.CommandObject, storage: "Storage"
+    message: types.Message,
+    command: filters.CommandObject,
+    storage: "Storage",
+    notificator: "Notificator",
 ):
     if not message.from_user:
         return
@@ -38,10 +42,13 @@ async def start_handler(
             "Чтобы получать уведомления только по конкретной улице, "
             "введите команду /filter"
         )
+        + "\n\nИсточник информации об отключениях: https://005красноярск.рф"
     )
     await message.answer(msg)
 
     logger.info("User %d subscribed to updates", user_id)
+
+    await notificator.new_user(message.from_user)
 
 
 @router.message(filters.Command("stop"))
