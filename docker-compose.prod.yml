@@ -13,10 +13,9 @@ services:
     deploy:
       labels:
         - "traefik.enable=true"
-        - "traefik.docker.network=public"
         - "traefik.http.routers.bot-webhook.rule=Host(`xn--90abjv8bl.xn--005-ddd9dya.xn--p1ai`)"
         - "traefik.http.routers.bot-webhook.entrypoints=https"
-        - "traefik.http.routers.bot-webhook.tls.certresolver=le"
+        - "traefik.http.routers.bot-webhook.tls=true"
         - "traefik.http.services.bot-webhook.loadbalancer.server.port=8000"
       replicas: 1
       resources:
