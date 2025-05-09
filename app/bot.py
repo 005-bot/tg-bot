@@ -3,19 +3,21 @@ import logging
 import signal
 from typing import Optional
 
+from address_parser import AddressParser
 from aiogram import Bot, Dispatcher, exceptions, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand
-from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.fsm.storage.base import DefaultKeyBuilder
+from aiogram.fsm.storage.redis import RedisStorage
+from aiogram.types import BotCommand
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 from redis.asyncio import Redis
 
 from app import handlers
-from app.admin import Notificator, Config
+from app.admin import Config, Notificator
 from app.config import config
+from app.migrations import Migrator
 from app.services import Listener, Storage
 
 logger = logging.getLogger(__name__)
@@ -37,55 +39,57 @@ async def run():
     r = Redis.from_url(url=config.redis.url, decode_responses=True)
     s = Storage(redis=r, prefix=config.redis.prefix)
 
-    await s.migrate()
+    await Migrator(s).migrate()
 
-    dp = Dispatcher(
-        storage=RedisStorage(
-            r, key_builder=DefaultKeyBuilder(prefix=f"{config.redis.prefix}:fsm")
-        ),
-    )
-    dp.include_router(handlers.router)
-
-    bot = create_bot()
-    await bot.set_my_commands(
-        commands=[
-            BotCommand(command="start", description="Подписаться на уведомления"),
-            BotCommand(command="stop", description="Отписаться от уведомлений"),
-            BotCommand(
-                command="filter",
-                description="Подписаться на уведомления только по определенной улице",
+    async with AddressParser() as address_parser:
+        dp = Dispatcher(
+            storage=RedisStorage(
+                r, key_builder=DefaultKeyBuilder(prefix=f"{config.redis.prefix}:fsm")
             ),
-            BotCommand(command="feedback", description="Отправить отзыв"),
-            BotCommand(command="help", description="Показать справку"),
-        ]
-    )
+            address_parser=address_parser,
+        )
+        dp.include_router(handlers.router)
 
-    notificator = Notificator(Config(admin_id=config.admin.telegram_id), bot)
+        bot = create_bot()
+        await bot.set_my_commands(
+            commands=[
+                BotCommand(command="start", description="Подписаться на уведомления"),
+                BotCommand(command="stop", description="Отписаться от уведомлений"),
+                BotCommand(
+                    command="filter",
+                    description="Подписаться на уведомления только по определенной улице",
+                ),
+                BotCommand(command="feedback", description="Отправить отзыв"),
+                BotCommand(command="help", description="Показать справку"),
+            ]
+        )
 
-    listener = Listener(r, config.redis.prefix)
+        notificator = Notificator(Config(admin_id=config.admin.telegram_id), bot)
 
-    loop = asyncio.get_event_loop()
-    loop.create_task(listen(bot, listener, s))
+        listener = Listener(r, config.redis.prefix)
 
-    register_signal_handlers(loop)
+        loop = asyncio.get_event_loop()
+        loop.create_task(listen(bot, listener, s))
 
-    # And the run events dispatching
-    try:
-        if not config.http.webhook_path:
-            await start_polling(bot, dp, storage=s, notificator=notificator)
-        else:
-            await start_webhook(
-                bot,
-                dp,
-                config.telegram.webhook_url,
-                config.http.webhook_path,
-                storage=s,
-                notificator=notificator,
-            )
-    except asyncio.CancelledError:
-        pass
-    finally:
-        await r.close()
+        register_signal_handlers(loop)
+
+        # And the run events dispatching
+        try:
+            if not config.http.webhook_path:
+                await start_polling(bot, dp, storage=s, notificator=notificator)
+            else:
+                await start_webhook(
+                    bot,
+                    dp,
+                    config.telegram.webhook_url,
+                    config.http.webhook_path,
+                    storage=s,
+                    notificator=notificator,
+                )
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await r.close()
 
 
 async def start_polling(bot: Bot, dp: Dispatcher, **kwargs):
