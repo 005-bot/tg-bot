@@ -4,16 +4,18 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+address-parser = {git = "git+https://github.com/005-bot/address-parser"}
 aiogram = "~=3.13"
-redis = "~=5.1"
-apis = {git = "git+https://github.com/005-bot/apis"}
-pydantic = "*"
 aiohttp = "*"
+aiosqlite = "*"
+apis = {git = "git+https://github.com/005-bot/apis"}
 click = "*"
+pydantic = "*"
+redis = "~=5.1"
 
 [dev-packages]
-flake8 = "*"
 black = "*"
+flake8 = "*"
 flake8-bugbear = "*"
 
 [requires]

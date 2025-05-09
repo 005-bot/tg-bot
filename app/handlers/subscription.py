@@ -1,14 +1,15 @@
 import logging
 from typing import TYPE_CHECKING
 
-from aiogram import Router, filters, types, F
+from address_parser import AddressParser, Match
+from aiogram import F, Router, filters, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.deep_linking import decode_payload
 
 if TYPE_CHECKING:
-    from app.services import Storage
     from app.admin import Notificator
+    from app.services import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,10 @@ class Filter(StatesGroup):
 async def start_handler(
     message: types.Message,
     command: filters.CommandObject,
+    state: FSMContext,
     storage: "Storage",
     notificator: "Notificator",
+    address_parser: AddressParser,
 ):
     if not message.from_user:
         return
@@ -32,17 +35,23 @@ async def start_handler(
     user_id = message.from_user.id
     args = decode_payload(command.args) if command.args else None
 
-    await storage.subscribe(str(user_id), args)
+    await storage.subscribe(str(user_id), None)
+    parsed = await parse_and_subscribe(args, message, storage, state, address_parser)
+    if args and not parsed:
+        return
 
-    msg = "Вы подписались на уведомления об отключениях" + (
-        " на улице " + args
-        if args
-        else (
+    base = "Вы подписались на уведомления об отключениях"
+    if parsed:
+        details = f" по адресу {parsed.name}"
+    else:
+        details = (
             ".\r\n"
             "Чтобы получать уведомления только по конкретной улице, "
             "введите команду /filter"
         )
-        + "\n\nИсточник информации об отключениях: https://005красноярск.рф"
+    msg = (
+        f"{base}{details}\n\n"
+        "Источник информации об отключениях: https://005красноярск.рф"
     )
     await message.answer(msg)
 
@@ -73,7 +82,7 @@ async def filter_handler(message: types.Message, storage: "Storage", state: FSMC
     await state.set_state(Filter.filter)
     await message.answer(
         "Пожалуйста, введите наименование улицы, по которой интересны уведомления."
-        + (f" Текущее значение: {f.street}" if f.street else ""),
+        + (f"\n\nТекущее значение: {f.street}" if f.street else ""),
         reply_markup=types.ReplyKeyboardMarkup(
             keyboard=[[types.KeyboardButton(text="Отмена")]],
             one_time_keyboard=True,
@@ -94,7 +103,7 @@ async def filter_cancel_handler(
     f = await storage.get_filter(str(message.from_user.id))
     await message.answer(
         (
-            f"Вы подписаны на уведомления для улицы {f.street}"
+            f"Вы подписаны на уведомления для {f.street}"
             if f.street
             else "Вы подписаны на все уведомления"
         ),
@@ -104,19 +113,61 @@ async def filter_cancel_handler(
 
 @router.message(Filter.filter, ~F.text.startswith("/"))
 async def filter_value_handler(
-    message: types.Message, storage: "Storage", state: FSMContext
+    message: types.Message,
+    storage: "Storage",
+    state: FSMContext,
+    address_parser: AddressParser,
 ):
-    if not message.from_user or not message.text:
+    parsed = await parse_and_subscribe(
+        message.text, message, storage, state, address_parser
+    )
+    if not parsed:
         return
-
-    user_id = message.from_user.id
-    value = message.text.strip()
-
-    await storage.subscribe(str(user_id), value)
-    # await storage.set_filter(str(user_id), message.text)
 
     await state.clear()
     await message.answer(
-        "Вы подписаны на уведомления для улицы " + value,
+        "Создана подписка: " + parsed.name,
         reply_markup=types.ReplyKeyboardRemove(),
     )
+
+
+async def parse_and_subscribe(
+    value: str | None,
+    message: types.Message,
+    storage: "Storage",
+    state: FSMContext,
+    address_parser: AddressParser,
+) -> Match | None:
+    if not message.from_user or not value:
+        return
+
+    user_id = message.from_user.id
+    value = value.strip()
+
+    parsed = await address_parser.normalize(value)
+    if not parsed:
+        await state.set_state(Filter.filter)
+        await message.answer(
+            "Не удалось определить улицу. Пожалуйста, укажите наименование без дополнительных слов, "
+            "например: 'Ленина' или 'Мира'"
+        )
+        return
+
+    if parsed.confidence < 0.85:
+        await state.set_state(Filter.filter)
+        await message.answer(
+            f"Вы имели в виду {parsed.name}?\n\nИспользуйте кнопку для подтверждения или введите другой вариант.",
+            reply_markup=types.ReplyKeyboardMarkup(
+                keyboard=[
+                    [types.KeyboardButton(text=parsed.name)],
+                    [types.KeyboardButton(text="Отмена")],
+                ],
+                resize_keyboard=True,
+                one_time_keyboard=True,
+            ),
+        )
+        return
+
+    await storage.subscribe(str(user_id), parsed.name)
+
+    return parsed

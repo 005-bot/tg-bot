@@ -2,3 +2,11 @@
 
 ###
 GET {{baseUrl}}/getWebhookInfo HTTP/1.1
+
+###
+POST {{baseUrl}}/setWebhook HTTP/1.1
+Content-Type: application/json
+
+{
+    "url": "{{$dotenv TELEGRAM__WEBHOOK_URL}}"
+}
