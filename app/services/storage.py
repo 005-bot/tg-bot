@@ -23,6 +23,7 @@ class Storage:
     def __init__(self, redis: "Redis", prefix: str):
         self.redis = redis
         self.prefix = prefix
+        self.key_version = f"{prefix}:version"
         self.key_filters = f"{prefix}:filters"
 
     async def migrate(self) -> None:
@@ -63,3 +64,9 @@ class Storage:
             return Filter(street=None)
 
         return Filter.model_validate_json(v)
+
+    async def set_version(self, version: int) -> None:
+        await result(self.redis.set(self.key_version, version))
+
+    async def get_version(self) -> int:
+        return int(await result(self.redis.get(self.key_version)) or 0)
