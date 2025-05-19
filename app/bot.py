@@ -166,8 +166,6 @@ async def listen(bot: Bot, listener: Listener, storage: Storage):
             except exceptions.TelegramForbiddenError:
                 await storage.unsubscribe(user_id)
                 logger.info("User %s unsubscribed from updates", user_id)
-            except Exception as e:
-                logger.error(e)
 
 
 def register_signal_handlers(loop):
