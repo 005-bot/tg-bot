@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import signal
-from typing import Optional
+from typing import Any, Awaitable, Callable, Never, Optional
 
 from address_parser import AddressParser
 from aiogram import Bot, Dispatcher, exceptions, html
@@ -69,7 +69,7 @@ async def run():
         listener = Listener(r, config.redis.prefix)
 
         loop = asyncio.get_event_loop()
-        loop.create_task(listen(bot, listener, s))
+        loop.create_task(retry(lambda: listen(bot, listener, s)))
 
         register_signal_handlers(loop)
 
@@ -142,6 +142,17 @@ async def start_webhook(
         await runner.cleanup()
 
 
+async def retry(func: Callable[[], Awaitable[Any]]) -> Never:
+    while True:
+        try:
+            await func()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Failed to run %s", func)
+            await asyncio.sleep(1)
+
+
 async def listen(bot: Bot, listener: Listener, storage: Storage):
     async for outage in listener.listen():
         subscribers = await storage.get_subscribed()
@@ -151,17 +162,34 @@ async def listen(bot: Bot, listener: Listener, storage: Storage):
 
             logger.info("Sending message to user %s", user_id)
             try:
+                # Define constants for truncation
+                MAX_MESSAGE_LENGTH = 4096
+                ELLIPSIS = "…"
+
+                # Format area and other fields
+                area_formatted = f"{html.bold(html.quote(outage.area))}\n\n"
+                dates_formatted = f"\n{html.quote(outage.dates)}"
+                org_formatted = f"\n{html.quote(outage.organization)}"
+
+                # Calculate available space for address
+                base_length = (
+                    len(area_formatted) + len(dates_formatted) + len(org_formatted)
+                )
+                max_address_length = MAX_MESSAGE_LENGTH - base_length - len(ELLIPSIS)
+
+                # Truncate address if needed
+                raw_address = outage.address
+                if len(raw_address) > max_address_length:
+                    raw_address = raw_address[:max_address_length] + ELLIPSIS
+                address_text = html.quote(raw_address)
+
+                # Construct and send message
+                message = (
+                    f"{area_formatted}{address_text}{dates_formatted}{org_formatted}"
+                )
                 await bot.send_message(
                     user_id,
-                    f"""
-{html.bold(html.quote(outage.area))}
-
-{html.quote(outage.address)}
-
-{html.quote(outage.dates)}
-
-{html.quote(outage.organization)}
-                    """,
+                    message,
                 )
             except exceptions.TelegramForbiddenError:
                 await storage.unsubscribe(user_id)
