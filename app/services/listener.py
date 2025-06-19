@@ -20,6 +20,6 @@ class Listener:
                 continue
 
             data: str = message["data"]
-            outage = Outage.from_json(data)
+            outage = Outage.model_validate_json(data)
 
             yield outage
