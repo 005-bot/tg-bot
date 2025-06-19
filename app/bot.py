@@ -12,11 +12,13 @@ from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import BotCommand
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
+from apis.models import ResourceType
 from redis.asyncio import Redis
 
 from app import handlers
 from app.admin import Config, Notificator
 from app.config import config
+from app.i18n import format_date_ru
 from app.migrations import Migrator
 from app.services import Listener, Storage
 
@@ -155,42 +157,56 @@ async def retry(func: Callable[[], Awaitable[Any]]) -> Never:
 
 async def listen(bot: Bot, listener: Listener, storage: Storage):
     async for outage in listener.listen():
+        streets = {s.name.lower() for s in outage.details.streets}
         subscribers = await storage.get_subscribed()
+
         for user_id, f in subscribers.items():
-            if f.street and f.street.lower() not in outage.address.lower():
+            if f.street and f.street.lower() not in streets:
                 continue
 
             logger.info("Sending message to user %s", user_id)
             try:
-                # Define constants for truncation
                 MAX_MESSAGE_LENGTH = 4096
                 ELLIPSIS = "…"
 
-                # Format area and other fields
-                area_formatted = f"{html.bold(html.quote(outage.area))}\n\n"
-                dates_formatted = f"\n{html.quote(outage.dates)}"
-                org_formatted = f"\n{html.quote(outage.organization)}"
+                emojies: dict[ResourceType | None, str] = {
+                    ResourceType.ELECTRICITY: "⚡️",
+                    ResourceType.GAS: "🔥",
+                    ResourceType.COLD_WATER: "💧",
+                    ResourceType.HOT_WATER: "🌡️",
+                }
 
-                # Calculate available space for address
-                base_length = (
-                    len(area_formatted) + len(dates_formatted) + len(org_formatted)
+                streets_formatted = html.quote(
+                    "\n".join(
+                        [
+                            f"{emojies.get(outage.organization_info.resource_type, f'({outage.organization_info.resource})')} {str(street)}"
+                            for street in outage.details.streets
+                        ]
+                    )
                 )
-                max_address_length = MAX_MESSAGE_LENGTH - base_length - len(ELLIPSIS)
+                dates_formatted = (
+                    f"{' '.join(format_date_ru(date) for date in outage.period)}"
+                )
+                reason_formatted = (
+                    f"{outage.details.reason.type}: " if outage.details.reason else ""
+                )
 
-                # Truncate address if needed
-                raw_address = outage.address
-                if len(raw_address) > max_address_length:
-                    raw_address = raw_address[:max_address_length] + ELLIPSIS
-                address_text = html.quote(raw_address)
+                message_suffix = html.bold(
+                    html.quote(reason_formatted + dates_formatted)
+                )
 
-                # Construct and send message
-                message = (
-                    f"{area_formatted}{address_text}{dates_formatted}{org_formatted}"
+                max_streets_length = (
+                    MAX_MESSAGE_LENGTH - len(message_suffix) - len(ELLIPSIS) - 2
                 )
-                await bot.send_message(
-                    user_id,
-                    message,
-                )
+
+                if len(streets_formatted) > max_streets_length:
+                    streets_formatted = (
+                        f"{streets_formatted[:max_streets_length]}{ELLIPSIS}"
+                    )
+
+                message = f"{message_suffix.upper()}\n\n{streets_formatted}"
+
+                await bot.send_message(user_id, message)
             except exceptions.TelegramForbiddenError:
                 await storage.unsubscribe(user_id)
                 logger.info("User %s unsubscribed from updates", user_id)

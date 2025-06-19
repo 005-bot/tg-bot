@@ -3,15 +3,18 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
 
+[pipenv]
+sort_pipfile = true
+
 [packages]
 address-parser = {git = "git+https://github.com/005-bot/address-parser"}
 aiogram = "~=3.13"
 aiohttp = "*"
 aiosqlite = "*"
-apis = {git = "git+https://github.com/005-bot/apis"}
 click = "*"
 pydantic = "*"
 redis = "~=5.1"
+apis = {git = "git+https://github.com/005-bot/apis"}
 
 [dev-packages]
 black = "*"
