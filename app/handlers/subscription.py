@@ -40,18 +40,14 @@ async def start_handler(
     if args and not parsed:
         return
 
-    base = "Вы подписались на уведомления об отключениях"
+    base = "✅ Вы подписаны на уведомления об отключениях"
     if parsed:
-        details = f" по адресу {parsed.name}"
+        details = f" по адресу:\n*{parsed.name}*"
     else:
-        details = (
-            ".\r\n"
-            "Чтобы получать уведомления только по конкретной улице, "
-            "введите команду /filter"
-        )
+        details = "\n\n🔍 Чтобы получать уведомления только по конкретной улице, используйте /filter"
     msg = (
         f"{base}{details}\n\n"
-        "Источник информации об отключениях: https://005красноярск.рф"
+        "ℹ️ Источник информации об отключениях: https://005красноярск.рф"
     )
     await message.answer(msg)
 
@@ -67,7 +63,7 @@ async def stop_handler(message: types.Message, storage: "Storage"):
 
     user_id = message.from_user.id
     await storage.unsubscribe(str(user_id))
-    await message.answer("Вы отписались от уведомлений об отключениях")
+    await message.answer("🔕 Вы *отписались* от уведомлений об отключениях")
 
     logger.info("User %d unsubscribed from updates", user_id)
 
@@ -78,11 +74,13 @@ async def filter_handler(message: types.Message, storage: "Storage", state: FSMC
         return
 
     f = await storage.get_filter(str(message.from_user.id))
+    filter_text = ""
+    if f.street:
+        filter_text = f"\n\n*Текущее значение:* {f.street}"
 
     await state.set_state(Filter.filter)
     await message.answer(
-        "Пожалуйста, введите наименование улицы, по которой интересны уведомления."
-        + (f"\n\nТекущее значение: {f.street}" if f.street else ""),
+        f"📍 Введите название улицы для фильтрации уведомлений{filter_text}",
         reply_markup=types.ReplyKeyboardMarkup(
             keyboard=[[types.KeyboardButton(text="Отмена")]],
             one_time_keyboard=True,
@@ -148,15 +146,16 @@ async def parse_and_subscribe(
     if not parsed:
         await state.set_state(Filter.filter)
         await message.answer(
-            "Не удалось определить улицу. Пожалуйста, укажите наименование без дополнительных слов, "
-            "например: 'Ленина' или 'Мира'"
+            "⚠️ Не удалось определить улицу!\n\n"
+            "Пожалуйста, укажите *только название улицы*, например:\n"
+            "- Ленина\n- Мира"
         )
         return
 
     if parsed.confidence < 0.85:
         await state.set_state(Filter.filter)
         await message.answer(
-            f"Вы имели в виду {parsed.name}?\n\nИспользуйте кнопку для подтверждения или введите другой вариант.",
+            f"🔍 Вы имели в виду *{parsed.name}*?\n\n✅ Используйте кнопку для подтверждения\n🔄 Или введите другой вариант.",
             reply_markup=types.ReplyKeyboardMarkup(
                 keyboard=[
                     [types.KeyboardButton(text=parsed.name)],
