@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
+
 from aiogram import Bot, types
 
 
@@ -15,7 +16,7 @@ class Notificator:
 
     async def new_user(self, user: types.User):
         await self.notify(
-            f"Новая подписка: @{user.username or user.first_name or user.id}"
+            f"👤 *Новая подписка:* @{user.username or user.first_name or user.id}"
         )
 
     async def feedback(self, message: types.Message):

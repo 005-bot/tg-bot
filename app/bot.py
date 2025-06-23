@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 def create_bot():
     return Bot(
         token=config.telegram.token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN),
     )
 
 
@@ -206,7 +206,7 @@ async def listen(bot: Bot, listener: Listener, storage: Storage):
 
                 message = f"{message_suffix.upper()}\n\n{streets_formatted}"
 
-                await bot.send_message(user_id, message)
+                await bot.send_message(user_id, message, parse_mode=ParseMode.HTML)
             except exceptions.TelegramForbiddenError:
                 await storage.unsubscribe(user_id)
                 logger.info("User %s unsubscribed from updates", user_id)
