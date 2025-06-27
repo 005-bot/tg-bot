@@ -14,6 +14,6 @@ def format_date_ru(date: datetime) -> str:
     current_locale = locale.getlocale()
     try:
         locale.setlocale(locale.LC_TIME, "ru_RU.UTF-8")
-        return date.strftime("%d %B %H-%M").lower()
+        return date.strftime("%d %B %H:%M").lower()
     finally:
         locale.setlocale(locale.LC_TIME, current_locale)
