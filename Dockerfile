@@ -1,14 +1,14 @@
 # Build stage
-FROM python:3.11-alpine as builder
+FROM python:3.11-slim as builder
 
 # Set the working directory in the container
 WORKDIR /usr/src
 
-# Install Git
-RUN apk add --no-cache git
-
 # Install system dependencies and Pipenv
-RUN pip install pipenv
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install pipenv
 
 ENV PIPENV_VENV_IN_PROJECT=1
 
@@ -19,10 +19,24 @@ COPY Pipfile Pipfile.lock ./
 RUN pipenv install --dev --deploy
 
 # Final stage
-FROM python:3.11-alpine
+FROM python:3.11-slim
 
 # Set the working directory in the container
 WORKDIR /app
+
+# Install timezone data and locales
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
+    locales \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "ru_RU.UTF-8 UTF-8" >> /etc/locale.gen \
+    && echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen \
+    && locale-gen ru_RU.UTF-8 \
+    && locale-gen en_US.UTF-8 \
+    && update-locale
+
+ENV TZ=Asia/Krasnoyarsk
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
