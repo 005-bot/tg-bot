@@ -19,6 +19,7 @@ from app import handlers
 from app.admin import Config, Notificator
 from app.config import config
 from app.i18n import format_date_ru
+from app.middlewares.error_handler import register_errors
 from app.migrations import Migrator
 from app.services import Listener, Storage
 
@@ -50,6 +51,8 @@ async def run():
             ),
             address_parser=address_parser,
         )
+        register_errors(dp)
+
         dp.include_router(handlers.router)
 
         bot = create_bot()
@@ -150,8 +153,12 @@ async def retry(func: Callable[[], Awaitable[Any]]) -> Never:
             await func()
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.exception("Failed to run %s", func)
+        except Exception as e:
+            # Add context to the error
+            if user_id := getattr(e, "user_id", None):
+                logger.exception("Failed to run %s for user %s", func.__name__, user_id)
+            else:
+                logger.exception("Failed to run %s", func.__name__)
             await asyncio.sleep(1)
 
 
