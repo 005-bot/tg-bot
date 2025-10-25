@@ -179,8 +179,9 @@ async def listen(bot: Bot, listener: Listener, storage: Storage):
                 emojies: dict[ResourceType | None, str] = {
                     ResourceType.ELECTRICITY: "⚡️",
                     ResourceType.GAS: "🔥",
-                    ResourceType.COLD_WATER: "💧",
-                    ResourceType.HOT_WATER: "🌡️",
+                    ResourceType.COLD_WATER: "❄️🚰",
+                    ResourceType.HOT_WATER: "🌡️🚰",
+                    ResourceType.HEATING: "♨️",
                 }
 
                 streets_formatted = html.quote(
