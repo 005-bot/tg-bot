@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from aiogram import Bot, types
+from aiogram.utils.markdown import link
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,7 +17,11 @@ class Notificator:
 
     async def new_user(self, user: types.User):
         await self.notify(
-            f"👤 *Новая подписка:* @{user.username or user.first_name or user.id}"
+            "👤 *Новая подписка:* "
+            + link(
+                user.username or user.first_name or str(user.id),
+                url=f"tg://user?id={user.id}",
+            )
         )
 
     async def feedback(self, message: types.Message):
