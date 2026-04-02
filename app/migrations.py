@@ -18,7 +18,7 @@ class Migrator:
         :param storage: An instance of the Storage class used for migration operations.
         """
 
-        self.version = 1
+        self.version = 2
         self.storage = storage
 
     async def migrate(self):
@@ -54,6 +54,9 @@ class Migrator:
                     count += 1
 
                 logger.info("Updated %d subscriptions", count)
+
+        if version < 2:
+            await self.storage.backfill_filters()
 
         logger.info("Migration complete")
         await self.storage.set_version(self.version)

@@ -68,6 +68,36 @@ async def stop_handler(message: types.Message, storage: "Storage"):
     logger.info("User %d unsubscribed from updates", user_id)
 
 
+@router.message(filters.Command("ads"))
+async def ads_handler(
+    message: types.Message,
+    command: filters.CommandObject,
+    storage: "Storage",
+):
+    if not message.from_user:
+        return
+
+    user_id = str(message.from_user.id)
+    arg = (command.args or "status").strip().lower()
+
+    if arg in {"off", "disable", "0"}:
+        await storage.set_ads_opt_out(user_id, True)
+        await message.answer("🚫 Рекламные сообщения отключены. Команда для включения: /ads on")
+        return
+
+    if arg in {"on", "enable", "1"}:
+        await storage.set_ads_opt_out(user_id, False)
+        await message.answer("✅ Рекламные сообщения включены. Команда для отключения: /ads off")
+        return
+
+    f = await storage.get_filter(user_id)
+    status = "выключены" if f.ads_opt_out else "включены"
+    await message.answer(
+        "ℹ️ Партнерские сообщения сейчас *{}*.\n"
+        "Используйте /ads on или /ads off для управления.".format(status)
+    )
+
+
 @router.message(filters.Command("filter"))
 async def filter_handler(message: types.Message, storage: "Storage", state: FSMContext):
     if not message.from_user:

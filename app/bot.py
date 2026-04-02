@@ -21,7 +21,7 @@ from app.config import config
 from app.i18n import format_date_ru
 from app.middlewares.error_handler import register_errors
 from app.migrations import Migrator
-from app.services import Listener, Storage
+from app.services import AdService, Listener, Storage
 
 logger = logging.getLogger(__name__)
 
@@ -66,15 +66,17 @@ async def run():
                 ),
                 BotCommand(command="feedback", description="Отправить отзыв"),
                 BotCommand(command="help", description="Показать справку"),
+                BotCommand(command="ads", description="Управление рекламными сообщениями"),
             ]
         )
 
         notificator = Notificator(Config(admin_id=config.admin.telegram_id), bot)
 
         listener = Listener(r, config.redis.prefix)
+        ad_service = AdService(s)
 
         loop = asyncio.get_event_loop()
-        loop.create_task(retry(lambda: listen(bot, listener, s)))
+        loop.create_task(retry(lambda: listen(bot, listener, s, ad_service)))
 
         register_signal_handlers(loop)
 
@@ -162,7 +164,7 @@ async def retry(func: Callable[[], Awaitable[Any]]) -> Never:
             await asyncio.sleep(1)
 
 
-async def listen(bot: Bot, listener: Listener, storage: Storage):
+async def listen(bot: Bot, listener: Listener, storage: Storage, ad_service: AdService):
     async for outage in listener.listen():
         streets = {s.name.lower() for s in outage.details.streets}
         subscribers = await storage.get_subscribed()
@@ -214,7 +216,19 @@ async def listen(bot: Bot, listener: Listener, storage: Storage):
 
                 message = f"{message_suffix.upper()}\n\n{streets_formatted}"
 
+                campaign = None
+                try:
+                    campaign = await ad_service.pick_for_user(user_id, f)
+                    message = ad_service.append_to_message(message, campaign)
+                except Exception:
+                    logger.exception("Failed to prepare ad for user %s", user_id)
+
                 await bot.send_message(user_id, message, parse_mode=ParseMode.HTML)
+
+                try:
+                    await ad_service.track_impression(user_id, campaign, sent=True)
+                except Exception:
+                    logger.exception("Failed to log ad impression for user %s", user_id)
             except exceptions.TelegramForbiddenError:
                 await storage.unsubscribe(user_id)
                 logger.info("User %s unsubscribed from updates", user_id)
